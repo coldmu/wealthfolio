@@ -8,10 +8,12 @@
 //! `rsp_cd`/`rsp_msg` + `Output_0`/`Output_1`. Field names are confirmed by
 //! the live probe (`apps/server/src/bin/verify_namu_account.rs`).
 
+pub mod client;
 pub mod error;
 pub mod models;
 pub mod service;
 
+pub use client::NamuHttpClient;
 pub use error::NamuReadError;
 pub use models::{
     normalize_holding, NamuAccount, NamuAccountsResponse, NamuBalanceResponse, NamuCredentials,
