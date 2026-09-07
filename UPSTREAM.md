@@ -3,18 +3,16 @@
 ## Fork identity
 
 - **Upstream:** <https://github.com/wealthfolio/wealthfolio.git>
+- **Private fork (origin):** <https://github.com/coldmu/wealthfolio.git>
 - **Pinned release:** `v3.7.0` (latest upstream release tag at fork time; no v3.8/tag exists upstream)
-- **Working branch:** `namu-spike`
+- **Working branch:** `namu-spike` (pushed; fork-internal PR: coldmu/wealthfolio#1)
 - **Local checkout:** `c:\Users\SDS\proj\rebal\wealthfolio-namu`
 
-At fork time the private fork repository had not been created yet, so `origin`
-still points at the upstream URL and `upstream` duplicates it. As soon as a
-private fork exists, repoint origin:
+`origin` was repointed to the private fork on first push (2026-09-07);
+`upstream` keeps pointing at the public repository for future merges:
 
 ```bash
-git remote set-url origin <private-fork-url>
-git remote -v            # expect: origin = private fork, upstream = wealthfolio/wealthfolio
-git push -u origin namu-spike
+git remote -v            # origin = private fork, upstream = wealthfolio/wealthfolio
 ```
 
 ## Recording the upstream version
