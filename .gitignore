@@ -109,6 +109,12 @@ Thumbs.db
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+# Namu fork — local data, secrets, and live-probe results (never commit)
+# (.env.web / .env.docker are already covered by the ".env.*" rule above)
+data/
+secrets/
+namu-live-result.json
+.cline/
 .playwright-report
 .playwright-mcp
 # AI tools

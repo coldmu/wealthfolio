@@ -1,0 +1,12 @@
+# NAMUH PLUG read-only sync overlay (spike).
+#
+# Usage (requires Docker + a local .env.web with NAMU_* values once issued):
+#   docker compose --env-file .env -f compose.yml -f compose.namu.yml up -d
+#
+# This overlay exists so the NAMU_* variables reach the container in web mode
+# without touching the upstream compose file. The app does not consume them
+# yet in this phase; the spike only proves read-only account eligibility.
+services:
+  wealthfolio:
+    env_file:
+      - .env.web
