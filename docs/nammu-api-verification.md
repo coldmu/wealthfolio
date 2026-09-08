@@ -35,7 +35,8 @@ Namu account ****5678 -> Supported (1 holdings)
 
 ## 라이브 모드 (운영 인증 사용
 
-대상 계좌번호를 `--account-id`로 전달 (생략 시 계좌목록 첫 번째):
+대상 계좌번호를 `--account-id`로 전달 (생략 시 `NAMU_ACCOUNT_ID` 환경변수 사용;
+둘 다 없으면 계좌목록의 첫 번째 계좌):
 
 ```powershell
 cargo run -p wealthfolio-server --bin verify_namu_account -- --live --account-id <11자리-계좌번호>

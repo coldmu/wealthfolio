@@ -73,8 +73,8 @@ impl NamuHttpClient {
     }
 
     /// Issues an OAuth access token using the official NAMUH PLUG token
-    /// endpoint (`POST /oauth2/token` with `appkey`, `appsecretkey`,
-    /// `grant_type=client_credentials`, `scope=oob`).
+    /// endpoint (`POST /oauth2/token`). Credentials travel in the form body —
+    /// never in the URL, which proxies and access logs record.
     pub async fn access_token(
         &self,
         credentials: &NamuCredentials,
@@ -86,14 +86,12 @@ impl NamuHttpClient {
         let response = self
             .http
             .post(url)
-            .query(&[
+            .form(&[
                 ("appkey", credentials.app_key().as_str()),
                 ("appsecretkey", credentials.app_secret().as_str()),
                 ("grant_type", "client_credentials"),
                 ("scope", "oob"),
             ])
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body("")
             .send()
             .await
             .map_err(|error| NamuReadError::Transport(transport_message(&error).to_owned()))?;
@@ -104,8 +102,15 @@ impl NamuHttpClient {
             .await
             .map_err(|_| NamuReadError::Transport(status.as_str().to_owned()))?;
 
-        if status != reqwest::StatusCode::OK {
+        // Only authentication failures map to Unauthorized; rate limits and
+        // outages keep their transport status so the probe reports them as
+        // such (exit code 2) instead of an auth problem.
+        if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(NamuReadError::Unauthorized);
+        }
+        if !status.is_success() {
+            // Status only — never the body.
+            return Err(NamuReadError::Transport(status.as_str().to_owned()));
         }
         let parsed: NamuTokenResponse =
             serde_json::from_str(&text).map_err(|_| NamuReadError::Unauthorized)?;
@@ -210,11 +215,13 @@ impl NamuReadService for NamuHttpClient {
     ) -> Result<Vec<super::models::NamuHolding>, NamuReadError> {
         let token = self.access_token(&self.credentials).await?;
         let body = json!({
-            "act_no": account_id,
-            "bnc_bse_cd": "1",
-            "ltg_aot_dit_cd": "1",
-            "aet_bse": "1",
-            "qut_dit_cd": "UNT",
+            "Input_0": {
+                "act_no": account_id,
+                "bnc_bse_cd": "1",
+                "ltg_aot_dit_cd": "1",
+                "aet_bse": "1",
+                "qut_dit_cd": "UNT",
+            }
         });
         let response: NamuBalanceResponse = self.post_json(paths::HOLDINGS, body, &token).await?;
         let holdings = response
@@ -228,8 +235,10 @@ impl NamuReadService for NamuHttpClient {
     async fn etf_quote(&self, symbol: &str) -> Result<super::models::NamuQuote, NamuReadError> {
         let token = self.access_token(&self.credentials).await?;
         let body = json!({
-            "iem_cd": symbol,
-            "market_cd": "KRX",
+            "Input_0": {
+                "iem_cd": symbol,
+                "market_cd": "KRX",
+            }
         });
         let response: NamuQuoteResponse = self.post_json(paths::QUOTE, body, &token).await?;
         let raw = response.quote.ok_or_else(|| {

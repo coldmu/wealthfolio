@@ -39,12 +39,14 @@ fn test_credentials() -> NamuCredentials {
 // Request-recording mock server
 // ---------------------------------------------------------------------------
 
-/// A recorded request: method, request target (path + query), and header
-/// *names* only ??header values are never recorded (redaction by design).
+/// A recorded request: method, request target (path + query), request body,
+/// and header *names* only — header values are never recorded (redaction by
+/// design).
 #[derive(Debug, Clone)]
 struct RecordedRequest {
     method: String,
     target: String,
+    body: String,
     header_names: Vec<String>,
 }
 
@@ -77,7 +79,11 @@ impl MockNamuServer {
                         return;
                     };
                     let text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                    let mut lines = text.lines();
+                    let (head, body) = match text.find("\r\n\r\n") {
+                        Some(pos) => (text[..pos].to_string(), text[pos + 4..].to_string()),
+                        None => (text.clone(), String::new()),
+                    };
+                    let mut lines = head.lines();
                     let request_line = lines.next().unwrap_or_default().to_string();
                     let mut parts = request_line.split_whitespace();
                     let method = parts.next().unwrap_or_default().to_string();
@@ -91,6 +97,7 @@ impl MockNamuServer {
                     requests.lock().unwrap().push(RecordedRequest {
                         method,
                         target,
+                        body,
                         header_names,
                     });
 
@@ -238,21 +245,31 @@ async fn oauth_and_read_calls_are_read_only() {
         recorded
     );
 
-    // Token call: POST to the official OAuth path with client_credentials..
+    // Token call: POST to the official OAuth path; credentials travel in
+    // the form body — never in the URL, which proxies and access logs record.
     let token_call = &recorded[0];
     assert_eq!(token_call.method, "POST");
-    assert!(token_call.target.starts_with("/oauth2/token?"));
-    assert!(token_call.target.contains("grant_type=client_credentials"));
-    assert!(token_call.target.contains("scope=oob"));
-    assert!(token_call.target.contains("appkey=fixture-app-key"));
+    assert_eq!(token_call.target, "/oauth2/token");
+    let token_body = token_call.body.as_str();
+    assert!(
+        token_body.contains("appkey=fixture-app-key"),
+        "appkey must be in the form body: {token_body}"
+    );
+    assert!(
+        token_body.contains("appsecretkey=fixture-app-secret"),
+        "appsecretkey must be in the form body: {token_body}"
+    );
+    assert!(token_body.contains("grant_type=client_credentials"));
+    assert!(token_body.contains("scope=oob"));
 
-    // Data calls: documented read paths, auth headers attached..
-    let expected = [
-        (2, "GET", "/n2/acctinfo"),
-        (4, "POST", "/krstock/inquiry/v1/balance"),
-        (6, "POST", "/krstock/quote/v1/currentPrice"),
+    // Data calls: documented read paths, auth headers attached, and JSON
+    // bodies wrapped in the Input_0 envelope (holdings/quote are POSTs)..
+    let expected: [(usize, &str, &str, Option<&str>); 3] = [
+        (2, "GET", "/n2/acctinfo", None),
+        (4, "POST", "/krstock/inquiry/v1/balance", Some("act_no")),
+        (6, "POST", "/krstock/quote/v1/currentPrice", Some("iem_cd")),
     ];
-    for (index, method, path) in expected {
+    for (index, method, path, body_needle) in expected {
         let call = &recorded[index];
         assert_eq!(call.method, method, "method for {path}");
         assert_eq!(
@@ -260,6 +277,18 @@ async fn oauth_and_read_calls_are_read_only() {
             path,
             "path for {path}"
         );
+        if let Some(needle) = body_needle {
+            assert!(
+                call.body.contains("\"Input_0\""),
+                "Input_0 envelope missing for {path}: {}",
+                call.body
+            );
+            assert!(
+                call.body.contains(needle),
+                "`{needle}` must sit inside Input_0 for {path}: {}",
+                call.body
+            );
+        }
         assert!(
             call.header_names.iter().any(|name| name == "authorization"),
             "bearer authorization header on {path}"
@@ -305,19 +334,32 @@ async fn oauth_and_read_calls_are_read_only() {
         }
     }
 
-    // Redaction: the app secret appears only in the official token call
-    // (the documented OAuth query, never on data calls); header values are
-    // never recorded at all.
+    // Redaction: the app secret never appears in any recorded URL target —
+    // it travels only inside the token request body; header values are never
+    // recorded at all.
     for call in &recorded {
-        if call.target.starts_with("/oauth2/token") {
-            continue;
-        }
         assert!(
             !call.target.contains("fixture-app-secret"),
-            "app secret leaked into a non-token call: {}",
+            "app secret leaked into a URL target: {}",
             call.target
         );
     }
+}
+
+#[tokio::test]
+async fn token_transport_failure_is_not_unauthorized() {
+    let server = MockNamuServer::start(HashMap::from([(
+        "/oauth2/token".to_string(),
+        (503, "gateway is busy".to_string()),
+    )]))
+    .await;
+    let client = client_for(&server).await;
+
+    let error = client.access_token(&test_credentials()).await.unwrap_err();
+    assert!(
+        matches!(error, NamuReadError::Transport(ref status) if status == "503"),
+        "non-auth token failures must keep their transport status: {error:?}"
+    );
 }
 
 #[tokio::test]
