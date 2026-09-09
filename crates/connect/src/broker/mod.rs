@@ -1,5 +1,6 @@
 pub mod mapping;
 mod models;
+pub mod namu;
 pub mod orchestrator;
 pub mod progress;
 mod service;

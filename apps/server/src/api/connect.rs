@@ -25,6 +25,7 @@ use axum::http::StatusCode;
 use wealthfolio_connect::prepare_post_login_broker_bootstrap;
 use wealthfolio_connect::{
     acquire_broker_sync_guard,
+    broker::namu::NamuBrokerApiClient,
     broker::{
         BrokerApiClient, PlansResponse, SyncAccountsResponse, SyncActivitiesResponse,
         SyncConnectionsResponse, UserInfo,
@@ -756,6 +757,69 @@ async fn perform_broker_activities_only_sync(
     orchestrator.sync_activities_only(&client).await
 }
 
+/// Perform Namu (나무증권) broker data sync for holdings.
+/// This syncs account holdings and prices from NAMUH PLUG API.
+async fn perform_namu_sync(state: &AppState) -> Result<SyncResult, String> {
+    let _guard = try_acquire_broker_sync_guard(state)
+        .ok_or_else(|| "Broker sync already running".to_string())?;
+
+    // Create Namu API client from secret store
+    let client = match NamuBrokerApiClient::from_secret_store(state.secret_store.as_ref()).await {
+        Ok(client) => client,
+        Err(err) => {
+            let message = err.to_string();
+            state.event_bus.publish(ServerEvent::with_payload(
+                BROKER_SYNC_ERROR,
+                serde_json::json!({ "error": message }),
+            ));
+            return Err(message);
+        }
+    };
+
+    // Create progress reporter and orchestrator
+    let reporter = Arc::new(EventBusProgressReporter::new(state.event_bus.clone()));
+    let orchestrator = SyncOrchestrator::new(
+        state.connect_sync_service.clone(),
+        reporter,
+        SyncConfig::default(),
+    );
+
+    // Run the sync via the centralized orchestrator
+    orchestrator.sync_all(&client).await
+}
+
+/// Trigger Namu (나무증권) broker data sync.
+/// Returns immediately with 202 Accepted. Sync runs in background and emits SSE events.
+async fn sync_namu_data(State(state): State<Arc<AppState>>) -> StatusCode {
+    if let Err(err) = ensure_connect_sync_enabled() {
+        error!("[Connect] Namu sync skipped: {}", err);
+        return StatusCode::NOT_IMPLEMENTED;
+    }
+
+    let Some(_guard) = try_acquire_broker_sync_guard(&state) else {
+        info!("[Connect] Namu sync skipped: sync already running");
+        return StatusCode::CONFLICT;
+    };
+
+    info!("[Connect] Starting Namu broker data sync (non-blocking)...");
+
+    // Spawn background task to perform the sync
+    tokio::spawn(async move {
+        match perform_namu_sync(&state).await {
+            Ok(_result) => {
+                info!("[Connect] Namu sync completed successfully");
+                // Events are emitted by the orchestrator via EventBusProgressReporter
+            }
+            Err(err) => {
+                error!("[Connect] Namu sync failed: {}", err);
+                // Error event is also emitted by the orchestrator
+            }
+        }
+    });
+
+    StatusCode::ACCEPTED
+}
+
 async fn get_subscription_plans(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<PlansResponse>> {
@@ -1300,6 +1364,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/connect/accounts", get(list_broker_accounts))
         // Unified sync (non-blocking, emits SSE events)
         .route("/connect/sync", post(sync_broker_data))
+        // Namu (나무증권) sync
+        .route("/connect/sync/namu", post(sync_namu_data))
         // Individual sync operations (kept for backwards compatibility)
         .route("/connect/sync/connections", post(sync_broker_connections))
         .route("/connect/sync/accounts", post(sync_broker_accounts))

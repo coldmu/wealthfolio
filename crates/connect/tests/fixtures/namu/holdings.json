@@ -1,0 +1,18 @@
+{
+  "rsp_cd": "00000",
+  "rsp_msg": "Success",
+  "Output_1": [
+    {
+      "pdt_tp_nm": "ETF",
+      "iem_nm": "TIGER 미국S&P500",
+      "iem_cd": "360750",
+      "tp_cd_nm": "ETF",
+      "itg_bnc_qty": "5",
+      "ny_stl_qty": "0",
+      "rsdl_qty": "5",
+      "phs_pr": "28500",
+      "now_pr": "30120",
+      "evlu_amt": "150600"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "rsp_cd": "00166",
+  "rsp_msg": "Success",
+  "Output_0": [
+    {
+      "acct_no": "12345678",
+      "acct_type": "02",
+      "acct_name": "연금저축"
+    }
+  ]
+}
