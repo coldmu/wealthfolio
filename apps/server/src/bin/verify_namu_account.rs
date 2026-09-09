@@ -42,7 +42,11 @@ fn render_result(account: &NamuAccount, supported: bool, holdings: usize) -> Str
     format!(
         "Namu account {} -> {} ({} holdings)",
         mask_account_id(&account.id),
-        if supported { "Supported" } else { "Unsupported" },
+        if supported {
+            "Supported"
+        } else {
+            "Unsupported"
+        },
         holdings
     )
 }

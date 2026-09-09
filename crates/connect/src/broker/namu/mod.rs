@@ -8,11 +8,15 @@
 //! `rsp_cd`/`rsp_msg` + `Output_0`/`Output_1`. Field names are confirmed by
 //! the live probe (`apps/server/src/bin/verify_namu_account.rs`).
 
+pub mod api_client;
 pub mod client;
 pub mod error;
 pub mod models;
 pub mod service;
 
+pub use api_client::{
+    NamuBrokerApiClient, NAMU_API_BASE_URL_KEY, NAMU_APP_KEY_KEY, NAMU_APP_SECRET_KEY,
+};
 pub use client::NamuHttpClient;
 pub use error::NamuReadError;
 pub use models::{
