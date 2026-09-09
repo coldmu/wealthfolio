@@ -126,5 +126,10 @@ process.on("SIGTERM", () => shutdownAndExit(143));
 
 // Start backend and Vite
 process.env.WF_ENABLE_VITE_PROXY = "true";
+const pnpmCmd = process.platform === "win32" ? "cmd" : "pnpm";
+const pnpmArgs =
+  process.platform === "win32"
+    ? ["/c", "pnpm.cmd", "--filter", "frontend", "dev"]
+    : ["--filter", "frontend", "dev"];
 spawnNamed("server", "cargo", ["run", "--manifest-path", "apps/server/Cargo.toml"]);
-spawnNamed("vite", "pnpm", ["--filter", "frontend", "dev"]);
+spawnNamed("vite", pnpmCmd, pnpmArgs);

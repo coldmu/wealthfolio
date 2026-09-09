@@ -4,6 +4,7 @@ import path from "path";
 import { defineConfig } from "vitest/config";
 
 const host = process.env.TAURI_DEV_HOST;
+const devHost = process.env.VITE_DEV_HOST || "127.0.0.1";
 const apiTarget =
   process.env.VITE_API_TARGET || process.env.WF_API_TARGET || "http://127.0.0.1:8088";
 const enableProxy = process.env.WF_ENABLE_VITE_PROXY === "true";
@@ -63,7 +64,7 @@ export default defineConfig({
   server: {
     port: Number.isFinite(devPort) ? devPort : 1420,
     strictPort: true,
-    host: host ? "0.0.0.0" : false,
+    host: host ? "0.0.0.0" : devHost,
     headers: {
       "Access-Control-Allow-Origin": "*",
     },
